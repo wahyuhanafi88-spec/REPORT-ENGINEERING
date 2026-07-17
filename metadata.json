@@ -1,0 +1,6 @@
+{
+  "name": "Engineering Operasional Gedung",
+  "description": "Sistem digital terintegrasi untuk pelaporan harian, mingguan, dan tahunan pemeliharaan gedung, sistem helpdesk, pencatatan energi, dan kontrol stok material.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
