@@ -21,6 +21,14 @@ import {
   initialCosts 
 } from './data/mockData';
 
+// Firebase Database Client Imports
+import { 
+  isFirebaseConfigured, 
+  getCollectionData, 
+  saveDocument, 
+  deleteDocument 
+} from './lib/firebase';
+
 // Component Imports
 import DashboardOverview from './components/DashboardOverview';
 import HelpdeskTickets from './components/HelpdeskTickets';
@@ -44,7 +52,10 @@ import {
   TrendingUp,
   User,
   Power,
-  RefreshCw
+  RefreshCw,
+  Database,
+  Cloud,
+  CloudOff
 } from 'lucide-react';
 
 export default function App() {
@@ -77,28 +88,170 @@ export default function App() {
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
 
-  // Load from LocalStorage or seed defaults
-  useEffect(() => {
-    const savedEmployees = localStorage.getItem('eng_employees');
-    const savedTickets = localStorage.getItem('eng_tickets');
-    const savedPM = localStorage.getItem('eng_pmTasks');
-    const savedEnergy = localStorage.getItem('eng_energyReadings');
-    const savedTools = localStorage.getItem('eng_tools');
-    const savedMaterials = localStorage.getItem('eng_materials');
-    const savedCosts = localStorage.getItem('eng_costs');
+  // Firebase connection and sync status
+  const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'not-configured'>('idle');
 
-    setEmployees(savedEmployees ? JSON.parse(savedEmployees) : initialEmployees);
-    setTickets(savedTickets ? JSON.parse(savedTickets) : initialTickets);
-    setPmTasks(savedPM ? JSON.parse(savedPM) : initialPMTasks);
-    setEnergyReadings(savedEnergy ? JSON.parse(savedEnergy) : initialEnergyReadings);
-    setTools(savedTools ? JSON.parse(savedTools) : initialTools);
-    setMaterials(savedMaterials ? JSON.parse(savedMaterials) : initialMaterials);
-    setCosts(savedCosts ? JSON.parse(savedCosts) : initialCosts);
+  // Load from Firebase or LocalStorage or seed defaults
+  useEffect(() => {
+    async function loadData() {
+      if (isFirebaseConfigured) {
+        setFirebaseSyncStatus('syncing');
+        try {
+          // Attempt to load collections from Firestore
+          const fbEmployees = await getCollectionData<Employee>('employees');
+          const fbTickets = await getCollectionData<Ticket>('tickets');
+          const fbPMTasks = await getCollectionData<PMTask>('pmTasks');
+          const fbEnergy = await getCollectionData<EnergyReading>('energyReadings');
+          const fbTools = await getCollectionData<ToolItem>('tools');
+          const fbMaterials = await getCollectionData<MaterialItem>('materials');
+          const fbCosts = await getCollectionData<CostRecord>('costs');
+
+          // Helper to seed whole default list to Firestore if the collection was empty on Firestore
+          const seedIfEmpty = async <T extends { id: string }>(list: T[], collectionName: string) => {
+            for (const item of list) {
+              await saveDocument(collectionName, item.id, item);
+            }
+          };
+
+          let loadedEmployees = fbEmployees;
+          if (!fbEmployees || fbEmployees.length === 0) {
+            await seedIfEmpty(initialEmployees, 'employees');
+            loadedEmployees = initialEmployees;
+          }
+
+          let loadedTickets = fbTickets;
+          if (!fbTickets || fbTickets.length === 0) {
+            await seedIfEmpty(initialTickets, 'tickets');
+            loadedTickets = initialTickets;
+          }
+
+          let loadedPMTasks = fbPMTasks;
+          if (!fbPMTasks || fbPMTasks.length === 0) {
+            await seedIfEmpty(initialPMTasks, 'pmTasks');
+            loadedPMTasks = initialPMTasks;
+          }
+
+          let loadedEnergy = fbEnergy;
+          if (!fbEnergy || fbEnergy.length === 0) {
+            await seedIfEmpty(initialEnergyReadings, 'energyReadings');
+            loadedEnergy = initialEnergyReadings;
+          }
+
+          let loadedTools = fbTools;
+          if (!fbTools || fbTools.length === 0) {
+            await seedIfEmpty(initialTools, 'tools');
+            loadedTools = initialTools;
+          }
+
+          let loadedMaterials = fbMaterials;
+          if (!fbMaterials || fbMaterials.length === 0) {
+            await seedIfEmpty(initialMaterials, 'materials');
+            loadedMaterials = initialMaterials;
+          }
+
+          let loadedCosts = fbCosts;
+          if (!fbCosts || fbCosts.length === 0) {
+            await seedIfEmpty(initialCosts, 'costs');
+            loadedCosts = initialCosts;
+          }
+
+          setEmployees(loadedEmployees || []);
+          setTickets(loadedTickets || []);
+          setPmTasks(loadedPMTasks || []);
+          setEnergyReadings(loadedEnergy || []);
+          setTools(loadedTools || []);
+          setMaterials(loadedMaterials || []);
+          setCosts(loadedCosts || []);
+
+          // Sync back to local storage for local offline redundancy
+          localStorage.setItem('eng_employees', JSON.stringify(loadedEmployees));
+          localStorage.setItem('eng_tickets', JSON.stringify(loadedTickets));
+          localStorage.setItem('eng_pmTasks', JSON.stringify(loadedPMTasks));
+          localStorage.setItem('eng_energyReadings', JSON.stringify(loadedEnergy));
+          localStorage.setItem('eng_tools', JSON.stringify(loadedTools));
+          localStorage.setItem('eng_materials', JSON.stringify(loadedMaterials));
+          localStorage.setItem('eng_costs', JSON.stringify(loadedCosts));
+
+          setFirebaseSyncStatus('synced');
+        } catch (error) {
+          console.error('Error syncing from Firebase Firestore:', error);
+          setFirebaseSyncStatus('error');
+          loadFromLocalStorage();
+        }
+      } else {
+        setFirebaseSyncStatus('not-configured');
+        loadFromLocalStorage();
+      }
+    }
+
+    function loadFromLocalStorage() {
+      const savedEmployees = localStorage.getItem('eng_employees');
+      const savedTickets = localStorage.getItem('eng_tickets');
+      const savedPM = localStorage.getItem('eng_pmTasks');
+      const savedEnergy = localStorage.getItem('eng_energyReadings');
+      const savedTools = localStorage.getItem('eng_tools');
+      const savedMaterials = localStorage.getItem('eng_materials');
+      const savedCosts = localStorage.getItem('eng_costs');
+
+      setEmployees(savedEmployees ? JSON.parse(savedEmployees) : initialEmployees);
+      setTickets(savedTickets ? JSON.parse(savedTickets) : initialTickets);
+      setPmTasks(savedPM ? JSON.parse(savedPM) : initialPMTasks);
+      setEnergyReadings(savedEnergy ? JSON.parse(savedEnergy) : initialEnergyReadings);
+      setTools(savedTools ? JSON.parse(savedTools) : initialTools);
+      setMaterials(savedMaterials ? JSON.parse(savedMaterials) : initialMaterials);
+      setCosts(savedCosts ? JSON.parse(savedCosts) : initialCosts);
+    }
+
+    loadData();
   }, []);
 
-  // Sync to LocalStorage upon changes
-  const saveToStorage = (key: string, data: any) => {
+  // Sync to LocalStorage AND Firebase upon changes
+  const saveToStorage = (
+    key: string, 
+    data: any, 
+    singleItem?: { collection: string; id: string; action: 'save' | 'delete' }
+  ) => {
     localStorage.setItem(key, JSON.stringify(data));
+    
+    if (isFirebaseConfigured) {
+      setFirebaseSyncStatus('syncing');
+      // Perform Firestore update asynchronously in background
+      (async () => {
+        try {
+          if (singleItem) {
+            if (singleItem.action === 'save') {
+              const itemToSave = data.find((x: any) => x.id === singleItem.id);
+              if (itemToSave) {
+                await saveDocument(singleItem.collection, singleItem.id, itemToSave);
+              }
+            } else if (singleItem.action === 'delete') {
+              await deleteDocument(singleItem.collection, singleItem.id);
+            }
+          } else {
+            // Overwrite collection (e.g. for reset)
+            const collectionMap: Record<string, string> = {
+              'eng_employees': 'employees',
+              'eng_tickets': 'tickets',
+              'eng_pmTasks': 'pmTasks',
+              'eng_energyReadings': 'energyReadings',
+              'eng_tools': 'tools',
+              'eng_materials': 'materials',
+              'eng_costs': 'costs'
+            };
+            const mappedName = collectionMap[key];
+            if (mappedName) {
+              for (const item of data) {
+                await saveDocument(mappedName, item.id, item);
+              }
+            }
+          }
+          setFirebaseSyncStatus('synced');
+        } catch (error) {
+          console.error('Error syncing write to Firebase:', error);
+          setFirebaseSyncStatus('error');
+        }
+      })();
+    }
   };
 
   // --- ACTIONS HANDLERS ---
@@ -115,7 +268,7 @@ export default function App() {
     
     const updated = [newTicket, ...tickets];
     setTickets(updated);
-    saveToStorage('eng_tickets', updated);
+    saveToStorage('eng_tickets', updated, { collection: 'tickets', id: newTicket.id, action: 'save' });
   };
 
   // 2. Update Ticket Status (Transitions to In Progress or Completed)
@@ -150,7 +303,7 @@ export default function App() {
             };
             const updatedCosts = [newCost, ...costs];
             setCosts(updatedCosts);
-            saveToStorage('eng_costs', updatedCosts);
+            saveToStorage('eng_costs', updatedCosts, { collection: 'costs', id: newCost.id, action: 'save' });
           }
         }
         return tCopy;
@@ -159,7 +312,7 @@ export default function App() {
     });
 
     setTickets(updated);
-    saveToStorage('eng_tickets', updated);
+    saveToStorage('eng_tickets', updated, { collection: 'tickets', id, action: 'save' });
   };
 
   // 3. Complete Preventive Maintenance Task (with checklist verification)
@@ -178,7 +331,7 @@ export default function App() {
     });
 
     setPmTasks(updated);
-    saveToStorage('eng_pmTasks', updated);
+    saveToStorage('eng_pmTasks', updated, { collection: 'pmTasks', id, action: 'save' });
   };
 
   // 4. Create custom PM task
@@ -190,7 +343,7 @@ export default function App() {
     };
     const updated = [newTask, ...pmTasks];
     setPmTasks(updated);
-    saveToStorage('eng_pmTasks', updated);
+    saveToStorage('eng_pmTasks', updated, { collection: 'pmTasks', id: newTask.id, action: 'save' });
   };
 
   // 5. Save daily utility logger
@@ -201,7 +354,7 @@ export default function App() {
     };
     const updated = [newReading, ...energyReadings];
     setEnergyReadings(updated);
-    saveToStorage('eng_energyReadings', updated);
+    saveToStorage('eng_energyReadings', updated, { collection: 'energyReadings', id: newReading.id, action: 'save' });
   };
 
   // 6. Adjust tool good/bad quantities
@@ -220,7 +373,7 @@ export default function App() {
       return t;
     });
     setTools(updated);
-    saveToStorage('eng_tools', updated);
+    saveToStorage('eng_tools', updated, { collection: 'tools', id, action: 'save' });
   };
 
   // 7. Deduct or replenish stock of warehouse items
@@ -235,7 +388,7 @@ export default function App() {
       return m;
     });
     setMaterials(updated);
-    saveToStorage('eng_materials', updated);
+    saveToStorage('eng_materials', updated, { collection: 'materials', id, action: 'save' });
   };
 
   // 12. Add Tool
@@ -246,21 +399,21 @@ export default function App() {
     };
     const updated = [...tools, item];
     setTools(updated);
-    saveToStorage('eng_tools', updated);
+    saveToStorage('eng_tools', updated, { collection: 'tools', id: item.id, action: 'save' });
   };
 
   // 13. Update Tool
   const handleUpdateTool = (updatedTool: ToolItem) => {
     const updated = tools.map(t => t.id === updatedTool.id ? updatedTool : t);
     setTools(updated);
-    saveToStorage('eng_tools', updated);
+    saveToStorage('eng_tools', updated, { collection: 'tools', id: updatedTool.id, action: 'save' });
   };
 
   // 14. Delete Tool
   const handleDeleteTool = (id: string) => {
     const updated = tools.filter(t => t.id !== id);
     setTools(updated);
-    saveToStorage('eng_tools', updated);
+    saveToStorage('eng_tools', updated, { collection: 'tools', id, action: 'delete' });
   };
 
   // 15. Add Material
@@ -271,21 +424,21 @@ export default function App() {
     };
     const updated = [...materials, item];
     setMaterials(updated);
-    saveToStorage('eng_materials', updated);
+    saveToStorage('eng_materials', updated, { collection: 'materials', id: item.id, action: 'save' });
   };
 
   // 16. Update Material
   const handleUpdateMaterial = (updatedMaterial: MaterialItem) => {
     const updated = materials.map(m => m.id === updatedMaterial.id ? updatedMaterial : m);
     setMaterials(updated);
-    saveToStorage('eng_materials', updated);
+    saveToStorage('eng_materials', updated, { collection: 'materials', id: updatedMaterial.id, action: 'save' });
   };
 
   // 17. Delete Material
   const handleDeleteMaterial = (id: string) => {
     const updated = materials.filter(m => m.id !== id);
     setMaterials(updated);
-    saveToStorage('eng_materials', updated);
+    saveToStorage('eng_materials', updated, { collection: 'materials', id, action: 'delete' });
   };
 
   // 9. Add Employee
@@ -296,21 +449,21 @@ export default function App() {
     };
     const updated = [...employees, newEmployee];
     setEmployees(updated);
-    saveToStorage('eng_employees', updated);
+    saveToStorage('eng_employees', updated, { collection: 'employees', id: newEmployee.id, action: 'save' });
   };
 
   // 10. Update Employee
   const handleUpdateEmployee = (updatedEmp: Employee) => {
     const updated = employees.map(e => e.id === updatedEmp.id ? updatedEmp : e);
     setEmployees(updated);
-    saveToStorage('eng_employees', updated);
+    saveToStorage('eng_employees', updated, { collection: 'employees', id: updatedEmp.id, action: 'save' });
   };
 
   // 11. Delete Employee
   const handleDeleteEmployee = (id: string) => {
     const updated = employees.filter(e => e.id !== id);
     setEmployees(updated);
-    saveToStorage('eng_employees', updated);
+    saveToStorage('eng_employees', updated, { collection: 'employees', id, action: 'delete' });
   };
 
   // 8. Wipe data to return to defaults
@@ -324,6 +477,16 @@ export default function App() {
       setTools(initialTools);
       setMaterials(initialMaterials);
       setCosts(initialCosts);
+
+      // Force-overwrite all collections back to defaults in Firestore
+      saveToStorage('eng_employees', initialEmployees);
+      saveToStorage('eng_tickets', initialTickets);
+      saveToStorage('eng_pmTasks', initialPMTasks);
+      saveToStorage('eng_energyReadings', initialEnergyReadings);
+      saveToStorage('eng_tools', initialTools);
+      saveToStorage('eng_materials', initialMaterials);
+      saveToStorage('eng_costs', initialCosts);
+
       setActiveTab('dashboard');
     }
   };
@@ -408,14 +571,41 @@ export default function App() {
             )}
           </div>
 
-          <button
-            onClick={handleResetData}
-            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-all uppercase tracking-wider font-bold"
-            title="Setel ulang data bawaan excel harian/bulanan"
-          >
-            <RefreshCw className="w-3 h-3" />
-            Reset Data Bawaan
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Firebase/Cloud Synchronization Status Badge */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] font-bold">
+              {firebaseSyncStatus === 'synced' ? (
+                <span className="flex items-center gap-1.5 text-emerald-400" title="Data berhasil disinkronkan secara real-time dengan Firebase Firestore">
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Firebase Synced</span>
+                </span>
+              ) : firebaseSyncStatus === 'syncing' ? (
+                <span className="flex items-center gap-1.5 text-indigo-400">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Sinkronisasi...</span>
+                </span>
+              ) : firebaseSyncStatus === 'error' ? (
+                <span className="flex items-center gap-1.5 text-rose-400" title="Gagal menyambung ke Firestore. Silakan periksa kredensial Firebase Anda.">
+                  <CloudOff className="w-3.5 h-3.5" />
+                  <span>Sync Gagal</span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-slate-400" title="Menggunakan Local Storage. Hubungkan ke database Firebase dengan mengatur variabel lingkungan VITE_FIREBASE_*.">
+                  <Database className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Lokal Mode (Offline)</span>
+                </span>
+              )}
+            </div>
+
+            <button
+              onClick={handleResetData}
+              className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-all uppercase tracking-wider font-bold"
+              title="Setel ulang data bawaan excel harian/bulanan"
+            >
+              <RefreshCw className="w-3 h-3" />
+              Reset Data Bawaan
+            </button>
+          </div>
         </div>
       </section>
 
