@@ -22,9 +22,9 @@ const firebaseConfig = {
 };
 
 const isFirebaseConfigured = !!(
-  firebaseConfig.apiKey &&
-  firebaseConfig.projectId &&
-  firebaseConfig.appId
+  firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('MASUKKAN_') &&
+  firebaseConfig.projectId && !firebaseConfig.projectId.includes('MASUKKAN_') &&
+  firebaseConfig.appId && !firebaseConfig.appId.includes('MASUKKAN_')
 );
 
 let app;
