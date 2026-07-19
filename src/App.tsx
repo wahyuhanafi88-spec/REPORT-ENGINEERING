@@ -31,7 +31,8 @@ import {
 import {
   findOrCreateSpreadsheet,
   loadSheetData,
-  saveSheetData
+  saveSheetData,
+  syncAllToSheets
 } from './lib/sheetsSync';
 
 // Component Imports
@@ -68,7 +69,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'helpdesk' | 'preventive' | 'energy' | 'inventory' | 'reports' | 'employees'>('dashboard');
 
   // User Authentication State
-  const [user, setUser] = useState<{ role: 'Super Admin' | 'Admin' | 'Teknisi'; name: string } | null>(null);
+  const [user, setUser] = useState<{ role: 'Super Admin' | 'Admin' | 'Teknisi'; name: string } | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bss_manual_user');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          return null;
+        }
+      }
+    }
+    return null;
+  });
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -85,6 +98,14 @@ export default function App() {
 
   // Sync status
   const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'not-configured'>('idle');
+  const [lastSyncedTime, setLastSyncedTime] = useState<string>('Belum pernah');
+  const [nextSyncCountdown, setNextSyncCountdown] = useState<number>(300);
+
+  const stateRef = React.useRef({ employees, tickets, pmTasks, energyReadings, tools, materials, costs });
+  
+  useEffect(() => {
+    stateRef.current = { employees, tickets, pmTasks, energyReadings, tools, materials, costs };
+  }, [employees, tickets, pmTasks, energyReadings, tools, materials, costs]);
 
   // Helper to load and seed all sheets if empty
   const loadAndSeedAllSheets = async (sheetId: string, token: string) => {
@@ -189,9 +210,16 @@ export default function App() {
             setMaterials(sheetsData.materials);
             setCosts(sheetsData.costs);
             setFirebaseSyncStatus('synced');
-          } catch (e) {
+            setLastSyncedTime(new Date().toLocaleTimeString('id-ID'));
+          } catch (e: any) {
             console.error('Error auto-syncing from Sheets:', e);
             setFirebaseSyncStatus('error');
+            const errMsg = e?.message || String(e);
+            if (errMsg.includes('401') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('token') || errMsg.toLowerCase().includes('auth')) {
+              await googleLogout();
+              setLoginError('Sesi sinkronisasi Google Sheets kedaluwarsa atau tidak sah. Silakan masuk kembali.');
+              setUser(null);
+            }
           }
         } else {
           // Force sign out if not allowed
@@ -208,6 +236,35 @@ export default function App() {
       if (unsubscribe) unsubscribe();
     };
   }, []);
+
+  // Load initial data (from Sheets if OAuth is active, or from LocalStorage if manual)
+  useEffect(() => {
+    if (user && !accessToken) {
+      // Manual login / Local mode
+      const getOrSeed = (key: string, initialData: any) => {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          try {
+            return JSON.parse(stored);
+          } catch (e) {
+            return initialData;
+          }
+        } else {
+          localStorage.setItem(key, JSON.stringify(initialData));
+          return initialData;
+        }
+      };
+
+      setEmployees(getOrSeed('eng_employees', initialEmployees));
+      setTickets(getOrSeed('eng_tickets', initialTickets));
+      setPmTasks(getOrSeed('eng_pmTasks', initialPMTasks));
+      setEnergyReadings(getOrSeed('eng_energyReadings', initialEnergyReadings));
+      setTools(getOrSeed('eng_tools', initialTools));
+      setMaterials(getOrSeed('eng_materials', initialMaterials));
+      setCosts(getOrSeed('eng_costs', initialCosts));
+      setFirebaseSyncStatus('not-configured'); // Indicates local mode
+    }
+  }, [user, accessToken]);
 
   const handleGoogleLogin = async () => {
     setIsLoggingIn(true);
@@ -259,6 +316,7 @@ export default function App() {
         setCosts(sheetsData.costs);
 
         setFirebaseSyncStatus('synced');
+        setLastSyncedTime(new Date().toLocaleTimeString('id-ID'));
       }
     } catch (err: any) {
       console.error('Google login error:', err);
@@ -271,6 +329,18 @@ export default function App() {
     }
   };
 
+  const handleManualLogin = (email: string, role: 'Super Admin' | 'Admin' | 'Teknisi', name: string) => {
+    const newUser = { role, name };
+    setUser(newUser);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bss_manual_user', JSON.stringify(newUser));
+    }
+    // Redirect Restricted Roles away from forbidden tabs
+    if (role === 'Teknisi') {
+      setActiveTab(prev => (prev === 'inventory' || prev === 'employees' ? 'dashboard' : prev));
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await googleLogout();
@@ -280,7 +350,56 @@ export default function App() {
     setUser(null);
     setAccessToken(null);
     setSpreadsheetId(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('bss_manual_user');
+    }
   };
+
+  // Full Synchronizer function that can be called manually or run automatically every 5 minutes
+  const handleFullSyncSheets = async (customToken?: string, customSpreadsheetId?: string) => {
+    const activeToken = customToken || accessToken;
+    const activeSpreadsheetId = customSpreadsheetId || spreadsheetId;
+    if (!activeToken || !activeSpreadsheetId) {
+      console.log('Sync to Google Sheets skipped: No active token or spreadsheet ID.');
+      return;
+    }
+    setFirebaseSyncStatus('syncing');
+    try {
+      const dataToSync = stateRef.current;
+      await syncAllToSheets(activeSpreadsheetId, dataToSync, activeToken);
+      setFirebaseSyncStatus('synced');
+      setLastSyncedTime(new Date().toLocaleTimeString('id-ID'));
+      setNextSyncCountdown(300); // Reset countdown to 5 minutes
+      console.log('Full sync with Google Sheets succeeded at ' + new Date().toLocaleTimeString('id-ID'));
+    } catch (error: any) {
+      console.error('Error in full sync:', error);
+      setFirebaseSyncStatus('error');
+      const errMsg = error?.message || String(error);
+      if (errMsg.includes('401') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('token') || errMsg.toLowerCase().includes('auth')) {
+        await googleLogout();
+        setLoginError('Sesi sinkronisasi Google Sheets kedaluwarsa atau tidak sah. Silakan masuk kembali.');
+        setUser(null);
+      }
+    }
+  };
+
+  // Run automatic full synchronization countdown (5 minutes / 300 seconds)
+  useEffect(() => {
+    if (!accessToken || !spreadsheetId) return;
+
+    setNextSyncCountdown(300); // Reset to 300s on login
+    const intervalId = setInterval(() => {
+      setNextSyncCountdown(prev => {
+        if (prev <= 1) {
+          handleFullSyncSheets();
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [accessToken, spreadsheetId]);
 
   // Sync to LocalStorage AND Google Sheets upon changes
   const saveToStorage = (
@@ -308,9 +427,15 @@ export default function App() {
             await saveSheetData(spreadsheetId, mappedName, data, accessToken);
             setFirebaseSyncStatus('synced');
           }
-        } catch (error) {
+        } catch (error: any) {
           console.error('Error syncing write to Google Sheets:', error);
           setFirebaseSyncStatus('error');
+          const errMsg = error?.message || String(error);
+          if (errMsg.includes('401') || errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('token') || errMsg.toLowerCase().includes('auth')) {
+            await googleLogout();
+            setLoginError('Sesi sinkronisasi Google Sheets kedaluwarsa atau tidak sah. Silakan masuk kembali.');
+            setUser(null);
+          }
         }
       })();
     }
@@ -562,6 +687,7 @@ export default function App() {
     return (
       <Login 
         onGoogleLogin={handleGoogleLogin} 
+        onManualLogin={handleManualLogin}
         isLoggingIn={isLoggingIn} 
         loginError={loginError} 
       />
@@ -639,30 +765,54 @@ export default function App() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             {/* Google Sheets Sync Status Badge */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] font-bold">
-              {firebaseSyncStatus === 'synced' ? (
-                <span className="flex items-center gap-1.5 text-emerald-400" title="Data berhasil disinkronkan ke Google Sheets Anda">
-                  <Cloud className="w-3.5 h-3.5" />
-                  <span>Google Sheets Synced</span>
-                </span>
-              ) : firebaseSyncStatus === 'syncing' ? (
-                <span className="flex items-center gap-1.5 text-indigo-400">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Sinkronisasi Google Sheets...</span>
-                </span>
-              ) : firebaseSyncStatus === 'error' ? (
-                <span className="flex items-center gap-1.5 text-rose-400" title="Gagal menyambung ke Google Sheets. Silakan masuk kembali.">
-                  <CloudOff className="w-3.5 h-3.5" />
-                  <span>Sync Google Sheets Gagal</span>
-                </span>
-              ) : (
-                <span className="flex items-center gap-1.5 text-slate-400" title="Belum masuk Google Sheets.">
-                  <Database className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Lokal Mode (Offline)</span>
-                </span>
-              )}
+            <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] font-bold">
+                {accessToken && spreadsheetId ? (
+                  <>
+                    {firebaseSyncStatus === 'synced' ? (
+                      <span className="flex items-center gap-1.5 text-emerald-400" title="Data berhasil disinkronkan ke Google Sheets Anda">
+                        <Cloud className="w-3.5 h-3.5 shrink-0" />
+                        <span>Sheets Terhubung</span>
+                      </span>
+                    ) : firebaseSyncStatus === 'syncing' ? (
+                      <span className="flex items-center gap-1.5 text-indigo-400">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                        <span>Sinkronisasi...</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-rose-400" title="Gagal menyambung ke Google Sheets.">
+                        <CloudOff className="w-3.5 h-3.5 shrink-0" />
+                        <span>Sinkronisasi Gagal</span>
+                      </span>
+                    )}
+                    
+                    <span className="text-slate-500 border-l border-slate-800 pl-2">
+                      Last Sync: <span className="text-slate-300">{lastSyncedTime}</span>
+                    </span>
+
+                    <span className="text-slate-500 border-l border-slate-800 pl-2 font-mono">
+                      Next: <span className="text-indigo-400 font-bold">{Math.floor(nextSyncCountdown / 60)}m {nextSyncCountdown % 60}s</span>
+                    </span>
+
+                    <button
+                      onClick={() => handleFullSyncSheets()}
+                      disabled={firebaseSyncStatus === 'syncing'}
+                      className="ml-1 px-2 py-0.5 rounded bg-indigo-600/20 hover:bg-indigo-600 active:bg-indigo-700 text-indigo-300 hover:text-white transition-all text-[10px] font-extrabold uppercase disabled:opacity-50 flex items-center gap-1"
+                      title="Paksa sinkronisasi seluruh perubahan data ke Google Drive sekarang"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${firebaseSyncStatus === 'syncing' ? 'animate-spin' : ''}`} />
+                      <span>Sinkron Sekarang</span>
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Database className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Mode Lokal (Masuk via Google untuk Auto-Sync 5 Menit ke Drive)</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             {user.role === 'Super Admin' && (

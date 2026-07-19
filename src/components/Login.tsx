@@ -3,20 +3,77 @@ import { Shield, Key, Eye, EyeOff, User, HardHat, Check, X, AlertCircle, Databas
 
 interface LoginProps {
   onGoogleLogin: () => Promise<void>;
+  onManualLogin: (email: string, role: 'Super Admin' | 'Admin' | 'Teknisi', name: string) => void;
   isLoggingIn: boolean;
   loginError: string;
 }
 
-export default function Login({ onGoogleLogin, isLoggingIn, loginError }: LoginProps) {
-  const [error, setError] = useState('');
+const MANUAL_ACCOUNTS = [
+  {
+    email: 'wahyuhanafi88@gmail.com',
+    aliases: ['wahyuhnafi88@gmail.com'],
+    password: 'superadmin123',
+    role: 'Super Admin' as const,
+    name: 'Wahyu Hanafi'
+  },
+  {
+    email: 'engineeringbss78@gmail.com',
+    aliases: [],
+    password: 'admin123',
+    role: 'Admin' as const,
+    name: 'BSS Engineering'
+  },
+  {
+    email: 'engineer4@gmail.com',
+    aliases: [],
+    password: 'teknisi123',
+    role: 'Teknisi' as const,
+    name: 'Teknisi BSS'
+  }
+];
 
-  const handleSubmit = async (e: React.FormEvent) => {
+export default function Login({ onGoogleLogin, onManualLogin, isLoggingIn, loginError }: LoginProps) {
+  const [error, setError] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleGoogleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      setError('');
       await onGoogleLogin();
     } catch (err: any) {
       setError(err.message || 'Gagal masuk dengan Google');
     }
+  };
+
+  const handleManualSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!emailInput.trim() || !passwordInput.trim()) {
+      setError('Silakan isi email dan kata sandi.');
+      return;
+    }
+
+    const emailLower = emailInput.trim().toLowerCase();
+    const matchedAccount = MANUAL_ACCOUNTS.find(acc => 
+      acc.email.toLowerCase() === emailLower || acc.aliases.some(alias => alias.toLowerCase() === emailLower)
+    );
+
+    if (!matchedAccount) {
+      setError('Akses Dibatasi. Email tidak terdaftar dalam sistem.');
+      return;
+    }
+
+    if (matchedAccount.password !== passwordInput) {
+      setError('Kata sandi salah. Silakan periksa kembali kata sandi Anda.');
+      return;
+    }
+
+    // Success
+    onManualLogin(matchedAccount.email, matchedAccount.role, matchedAccount.name);
   };
 
   return (
@@ -122,38 +179,100 @@ export default function Login({ onGoogleLogin, isLoggingIn, loginError }: LoginP
               </div>
             )}
  
-            {/* Google Sign-In Container */}
-            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+            {/* Interactive Login Card Forms */}
+            <div className="space-y-4 pt-2">
               
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-2">
-                <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">Persyaratan Masuk</span>
-                <p className="text-slate-500 leading-relaxed">
-                  Guna menjamin keamanan data multi-perangkat, aplikasi ini memerlukan otentikasi Google. Akses terbatas berdasarkan email terdaftar:
-                </p>
-                <div className="font-semibold text-indigo-600 space-y-1 text-[11px]">
-                  <div>• <b>wahyuhanafi88@gmail.com</b> (Super Admin)</div>
-                  <div>• <b>engineeringbss78@gmail.com</b> (Admin)</div>
-                  <div>• <b>engineer4@gmail.com</b> (Teknisi)</div>
+              {/* 1. Manual Email and Password Login */}
+              <form onSubmit={handleManualSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                    Email Pengguna
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="Ketik email terdaftar..."
+                      className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-700 uppercase tracking-wider mb-1">
+                    Kata Sandi (Password)
+                  </label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      placeholder="Sandi akun resmi..."
+                      className="w-full pl-9 pr-10 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-medium text-slate-800"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white rounded-lg py-2.5 text-xs font-bold transition-all shadow-sm focus:outline-none"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Masuk Sistem Secara Manual</span>
+                </button>
+              </form>
+
+              {/* Elegant Divider */}
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100"></div>
+                </div>
+                <div className="relative flex justify-center text-[9px] uppercase font-bold tracking-widest text-slate-400">
+                  <span className="bg-white px-2">Atau Otoritas Google Workspace</span>
                 </div>
               </div>
 
-              <div className="pt-3">
-                <button
-                  type="submit"
-                  disabled={isLoggingIn}
-                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 rounded-lg px-6 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all shadow-sm focus:outline-none disabled:opacity-50"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.4 3.7 1.5 7.6l3.9 3C6.3 7.5 9 5 12 5z"></path>
-                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"></path>
-                    <path fill="#FBBC05" d="M5.4 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.5 7.2C.5 9.2 0 11.5 0 13.8s.5 4.6 1.5 6.6l3.9-3.1C5.1 16.5 5.1 15.6 5.4 14.8z"></path>
-                    <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.7-2.5-6.6-5.6l-3.9 3C3.4 19.3 7.4 23 12 23z"></path>
-                  </svg>
-                  <span>{isLoggingIn ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
-                </button>
-              </div>
- 
-            </form>
+              {/* 2. Google OAuth Provider */}
+              <form onSubmit={handleGoogleSubmit} className="space-y-3">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-2">
+                  <span className="font-bold text-slate-700 block text-[10px] uppercase tracking-wider">Kredensial Resmi Terdaftar</span>
+                  <p className="text-slate-500 leading-relaxed text-[11px]">
+                    Guna sinkronisasi otomatis Google Sheets multi-perangkat. Anda dapat masuk manual dengan kredensial berikut:
+                  </p>
+                  <div className="font-semibold text-indigo-600 space-y-1.5 text-[10px]">
+                    <div>• <b>wahyuhanafi88@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>superadmin123</code><span className="text-slate-400 font-normal">)</span></div>
+                    <div>• <b>engineeringbss78@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>admin123</code><span className="text-slate-400 font-normal">)</span></div>
+                    <div>• <b>engineer4@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>teknisi123</code><span className="text-slate-400 font-normal">)</span></div>
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 rounded-lg px-6 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all shadow-sm focus:outline-none disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.4 3.7 1.5 7.6l3.9 3C6.3 7.5 9 5 12 5z"></path>
+                      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"></path>
+                      <path fill="#FBBC05" d="M5.4 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.5 7.2C.5 9.2 0 11.5 0 13.8s.5 4.6 1.5 6.6l3.9-3.1C5.1 16.5 5.1 15.6 5.4 14.8z"></path>
+                      <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.7-2.5-6.6-5.6l-3.9 3C3.4 19.3 7.4 23 12 23z"></path>
+                    </svg>
+                    <span>{isLoggingIn ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
  
           <div className="mt-8 pt-4 border-t border-slate-100 space-y-2">

@@ -55,7 +55,7 @@ provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 
 let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('bss_google_access_token') : null;
 
 // Initialize auth state listener
 export const initAuth = (
@@ -71,13 +71,14 @@ export const initAuth = (
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
-        // Token might have expired or not cached yet, we might need a re-auth if no token is found,
-        // but let's try to notify auth success if we can retrieve token or if we are still initialized.
-        // During hot reloads or state restoring, if auth is logged in but token not in memory, we can let user sign in.
+        // Clear status if token isn't in memory/localStorage anymore
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('bss_google_access_token');
+      }
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -97,6 +98,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    if (typeof window !== 'undefined' && cachedAccessToken) {
+      localStorage.setItem('bss_google_access_token', cachedAccessToken);
+    }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
@@ -115,6 +119,9 @@ export const logout = async () => {
     await signOut(auth);
   }
   cachedAccessToken = null;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('bss_google_access_token');
+  }
 };
 
 
