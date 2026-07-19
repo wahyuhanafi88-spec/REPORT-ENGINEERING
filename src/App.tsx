@@ -21,13 +21,18 @@ import {
   initialCosts 
 } from './data/mockData';
 
-// Firebase Database Client Imports
+// Firebase and Google Sheets Integration Imports
 import { 
-  isFirebaseConfigured, 
-  getCollectionData, 
-  saveDocument, 
-  deleteDocument 
+  initAuth,
+  googleSignIn,
+  logout as googleLogout
 } from './lib/firebase';
+
+import {
+  findOrCreateSpreadsheet,
+  loadSheetData,
+  saveSheetData
+} from './lib/sheetsSync';
 
 // Component Imports
 import DashboardOverview from './components/DashboardOverview';
@@ -63,21 +68,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'helpdesk' | 'preventive' | 'energy' | 'inventory' | 'reports' | 'employees'>('dashboard');
 
   // User Authentication State
-  const [user, setUser] = useState<{ role: 'User' | 'Engineer'; name: string } | null>(() => {
-    const saved = localStorage.getItem('eng_current_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-
-  const handleLogin = (role: 'User' | 'Engineer', name: string) => {
-    const newUser = { role, name };
-    setUser(newUser);
-    localStorage.setItem('eng_current_user', JSON.stringify(newUser));
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('eng_current_user');
-  };
+  const [user, setUser] = useState<{ role: 'User' | 'Engineer'; name: string } | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   // Unified persistent states
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -88,124 +83,170 @@ export default function App() {
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [costs, setCosts] = useState<CostRecord[]>([]);
 
-  // Firebase connection and sync status
+  // Sync status
   const [firebaseSyncStatus, setFirebaseSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'not-configured'>('idle');
 
-  // Load from Firebase or LocalStorage or seed defaults
+  // Helper to load and seed all sheets if empty
+  const loadAndSeedAllSheets = async (sheetId: string, token: string) => {
+    // 1. Load employees
+    let loadedEmployees = await loadSheetData(sheetId, 'employees', token);
+    if (!loadedEmployees || loadedEmployees.length === 0) {
+      await saveSheetData(sheetId, 'employees', initialEmployees, token);
+      loadedEmployees = initialEmployees;
+    }
+
+    // 2. Load tickets
+    let loadedTickets = await loadSheetData(sheetId, 'tickets', token);
+    if (!loadedTickets || loadedTickets.length === 0) {
+      await saveSheetData(sheetId, 'tickets', initialTickets, token);
+      loadedTickets = initialTickets;
+    }
+
+    // 3. Load pmTasks
+    let loadedPmTasks = await loadSheetData(sheetId, 'pmTasks', token);
+    if (!loadedPmTasks || loadedPmTasks.length === 0) {
+      await saveSheetData(sheetId, 'pmTasks', initialPMTasks, token);
+      loadedPmTasks = initialPMTasks;
+    }
+
+    // 4. Load energyReadings
+    let loadedEnergy = await loadSheetData(sheetId, 'energyReadings', token);
+    if (!loadedEnergy || loadedEnergy.length === 0) {
+      await saveSheetData(sheetId, 'energyReadings', initialEnergyReadings, token);
+      loadedEnergy = initialEnergyReadings;
+    }
+
+    // 5. Load tools
+    let loadedTools = await loadSheetData(sheetId, 'tools', token);
+    if (!loadedTools || loadedTools.length === 0) {
+      await saveSheetData(sheetId, 'tools', initialTools, token);
+      loadedTools = initialTools;
+    }
+
+    // 6. Load materials
+    let loadedMaterials = await loadSheetData(sheetId, 'materials', token);
+    if (!loadedMaterials || loadedMaterials.length === 0) {
+      await saveSheetData(sheetId, 'materials', initialMaterials, token);
+      loadedMaterials = initialMaterials;
+    }
+
+    // 7. Load costs
+    let loadedCosts = await loadSheetData(sheetId, 'costs', token);
+    if (!loadedCosts || loadedCosts.length === 0) {
+      await saveSheetData(sheetId, 'costs', initialCosts, token);
+      loadedCosts = initialCosts;
+    }
+
+    return {
+      employees: loadedEmployees,
+      tickets: loadedTickets,
+      pmTasks: loadedPmTasks,
+      energyReadings: loadedEnergy,
+      tools: loadedTools,
+      materials: loadedMaterials,
+      costs: loadedCosts
+    };
+  };
+
+  // Listen to Google Auth state
   useEffect(() => {
-    async function loadData() {
-      if (isFirebaseConfigured) {
-        setFirebaseSyncStatus('syncing');
-        try {
-          // Attempt to load collections from Firestore
-          const fbEmployees = await getCollectionData<Employee>('employees');
-          const fbTickets = await getCollectionData<Ticket>('tickets');
-          const fbPMTasks = await getCollectionData<PMTask>('pmTasks');
-          const fbEnergy = await getCollectionData<EnergyReading>('energyReadings');
-          const fbTools = await getCollectionData<ToolItem>('tools');
-          const fbMaterials = await getCollectionData<MaterialItem>('materials');
-          const fbCosts = await getCollectionData<CostRecord>('costs');
-
-          // Helper to seed whole default list to Firestore if the collection was empty on Firestore
-          const seedIfEmpty = async <T extends { id: string }>(list: T[], collectionName: string) => {
-            for (const item of list) {
-              await saveDocument(collectionName, item.id, item);
-            }
-          };
-
-          let loadedEmployees = fbEmployees;
-          if (!fbEmployees || fbEmployees.length === 0) {
-            await seedIfEmpty(initialEmployees, 'employees');
-            loadedEmployees = initialEmployees;
+    const unsubscribe = initAuth(
+      async (fbUser, token) => {
+        if (fbUser.email === 'engineeringbss78@gmail.com') {
+          setUser({
+            role: 'Engineer',
+            name: fbUser.displayName || 'BSS Engineering'
+          });
+          setAccessToken(token);
+          setFirebaseSyncStatus('syncing');
+          try {
+            const sheetId = await findOrCreateSpreadsheet(token);
+            setSpreadsheetId(sheetId);
+            const sheetsData = await loadAndSeedAllSheets(sheetId, token);
+            setEmployees(sheetsData.employees);
+            setTickets(sheetsData.tickets);
+            setPmTasks(sheetsData.pmTasks);
+            setEnergyReadings(sheetsData.energyReadings);
+            setTools(sheetsData.tools);
+            setMaterials(sheetsData.materials);
+            setCosts(sheetsData.costs);
+            setFirebaseSyncStatus('synced');
+          } catch (e) {
+            console.error('Error auto-syncing from Sheets:', e);
+            setFirebaseSyncStatus('error');
           }
-
-          let loadedTickets = fbTickets;
-          if (!fbTickets || fbTickets.length === 0) {
-            await seedIfEmpty(initialTickets, 'tickets');
-            loadedTickets = initialTickets;
-          }
-
-          let loadedPMTasks = fbPMTasks;
-          if (!fbPMTasks || fbPMTasks.length === 0) {
-            await seedIfEmpty(initialPMTasks, 'pmTasks');
-            loadedPMTasks = initialPMTasks;
-          }
-
-          let loadedEnergy = fbEnergy;
-          if (!fbEnergy || fbEnergy.length === 0) {
-            await seedIfEmpty(initialEnergyReadings, 'energyReadings');
-            loadedEnergy = initialEnergyReadings;
-          }
-
-          let loadedTools = fbTools;
-          if (!fbTools || fbTools.length === 0) {
-            await seedIfEmpty(initialTools, 'tools');
-            loadedTools = initialTools;
-          }
-
-          let loadedMaterials = fbMaterials;
-          if (!fbMaterials || fbMaterials.length === 0) {
-            await seedIfEmpty(initialMaterials, 'materials');
-            loadedMaterials = initialMaterials;
-          }
-
-          let loadedCosts = fbCosts;
-          if (!fbCosts || fbCosts.length === 0) {
-            await seedIfEmpty(initialCosts, 'costs');
-            loadedCosts = initialCosts;
-          }
-
-          setEmployees(loadedEmployees || []);
-          setTickets(loadedTickets || []);
-          setPmTasks(loadedPMTasks || []);
-          setEnergyReadings(loadedEnergy || []);
-          setTools(loadedTools || []);
-          setMaterials(loadedMaterials || []);
-          setCosts(loadedCosts || []);
-
-          // Sync back to local storage for local offline redundancy
-          localStorage.setItem('eng_employees', JSON.stringify(loadedEmployees));
-          localStorage.setItem('eng_tickets', JSON.stringify(loadedTickets));
-          localStorage.setItem('eng_pmTasks', JSON.stringify(loadedPMTasks));
-          localStorage.setItem('eng_energyReadings', JSON.stringify(loadedEnergy));
-          localStorage.setItem('eng_tools', JSON.stringify(loadedTools));
-          localStorage.setItem('eng_materials', JSON.stringify(loadedMaterials));
-          localStorage.setItem('eng_costs', JSON.stringify(loadedCosts));
-
-          setFirebaseSyncStatus('synced');
-        } catch (error) {
-          console.error('Error syncing from Firebase Firestore:', error);
-          setFirebaseSyncStatus('error');
-          loadFromLocalStorage();
+        } else {
+          // Force sign out if not allowed
+          await googleLogout();
+          setLoginError('Akses Dibatasi. Silakan masuk menggunakan email engineeringbss78@gmail.com.');
+          setUser(null);
         }
-      } else {
-        setFirebaseSyncStatus('not-configured');
-        loadFromLocalStorage();
+      },
+      () => {
+        setUser(null);
       }
-    }
-
-    function loadFromLocalStorage() {
-      const savedEmployees = localStorage.getItem('eng_employees');
-      const savedTickets = localStorage.getItem('eng_tickets');
-      const savedPM = localStorage.getItem('eng_pmTasks');
-      const savedEnergy = localStorage.getItem('eng_energyReadings');
-      const savedTools = localStorage.getItem('eng_tools');
-      const savedMaterials = localStorage.getItem('eng_materials');
-      const savedCosts = localStorage.getItem('eng_costs');
-
-      setEmployees(savedEmployees ? JSON.parse(savedEmployees) : initialEmployees);
-      setTickets(savedTickets ? JSON.parse(savedTickets) : initialTickets);
-      setPmTasks(savedPM ? JSON.parse(savedPM) : initialPMTasks);
-      setEnergyReadings(savedEnergy ? JSON.parse(savedEnergy) : initialEnergyReadings);
-      setTools(savedTools ? JSON.parse(savedTools) : initialTools);
-      setMaterials(savedMaterials ? JSON.parse(savedMaterials) : initialMaterials);
-      setCosts(savedCosts ? JSON.parse(savedCosts) : initialCosts);
-    }
-
-    loadData();
+    );
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
-  // Sync to LocalStorage AND Firebase upon changes
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    setLoginError('');
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        const { user: fbUser, accessToken: token } = result;
+        if (fbUser.email !== 'engineeringbss78@gmail.com') {
+          await googleLogout();
+          throw new Error('Akses Dibatasi. Silakan masuk menggunakan email engineeringbss78@gmail.com.');
+        }
+
+        setUser({
+          role: 'Engineer',
+          name: fbUser.displayName || 'BSS Engineering'
+        });
+        setAccessToken(token);
+
+        setFirebaseSyncStatus('syncing');
+        const sheetId = await findOrCreateSpreadsheet(token);
+        setSpreadsheetId(sheetId);
+
+        const sheetsData = await loadAndSeedAllSheets(sheetId, token);
+        setEmployees(sheetsData.employees);
+        setTickets(sheetsData.tickets);
+        setPmTasks(sheetsData.pmTasks);
+        setEnergyReadings(sheetsData.energyReadings);
+        setTools(sheetsData.tools);
+        setMaterials(sheetsData.materials);
+        setCosts(sheetsData.costs);
+
+        setFirebaseSyncStatus('synced');
+      }
+    } catch (err: any) {
+      console.error('Google login error:', err);
+      setLoginError(err.message || 'Gagal masuk dengan Google');
+      setUser(null);
+      setAccessToken(null);
+      setSpreadsheetId(null);
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await googleLogout();
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    setUser(null);
+    setAccessToken(null);
+    setSpreadsheetId(null);
+  };
+
+  // Sync to LocalStorage AND Google Sheets upon changes
   const saveToStorage = (
     key: string, 
     data: any, 
@@ -213,41 +254,26 @@ export default function App() {
   ) => {
     localStorage.setItem(key, JSON.stringify(data));
     
-    if (isFirebaseConfigured) {
+    if (spreadsheetId && accessToken) {
       setFirebaseSyncStatus('syncing');
-      // Perform Firestore update asynchronously in background
       (async () => {
         try {
-          if (singleItem) {
-            if (singleItem.action === 'save') {
-              const itemToSave = data.find((x: any) => x.id === singleItem.id);
-              if (itemToSave) {
-                await saveDocument(singleItem.collection, singleItem.id, itemToSave);
-              }
-            } else if (singleItem.action === 'delete') {
-              await deleteDocument(singleItem.collection, singleItem.id);
-            }
-          } else {
-            // Overwrite collection (e.g. for reset)
-            const collectionMap: Record<string, string> = {
-              'eng_employees': 'employees',
-              'eng_tickets': 'tickets',
-              'eng_pmTasks': 'pmTasks',
-              'eng_energyReadings': 'energyReadings',
-              'eng_tools': 'tools',
-              'eng_materials': 'materials',
-              'eng_costs': 'costs'
-            };
-            const mappedName = collectionMap[key];
-            if (mappedName) {
-              for (const item of data) {
-                await saveDocument(mappedName, item.id, item);
-              }
-            }
+          const collectionMap: Record<string, string> = {
+            'eng_employees': 'employees',
+            'eng_tickets': 'tickets',
+            'eng_pmTasks': 'pmTasks',
+            'eng_energyReadings': 'energyReadings',
+            'eng_tools': 'tools',
+            'eng_materials': 'materials',
+            'eng_costs': 'costs'
+          };
+          const mappedName = collectionMap[key];
+          if (mappedName) {
+            await saveSheetData(spreadsheetId, mappedName, data, accessToken);
+            setFirebaseSyncStatus('synced');
           }
-          setFirebaseSyncStatus('synced');
         } catch (error) {
-          console.error('Error syncing write to Firebase:', error);
+          console.error('Error syncing write to Google Sheets:', error);
           setFirebaseSyncStatus('error');
         }
       })();
@@ -497,7 +523,13 @@ export default function App() {
   const criticalMaterialsCount = materials.filter(m => m.stock <= m.minStock).length;
 
   if (!user) {
-    return <Login onLogin={handleLogin} />;
+    return (
+      <Login 
+        onGoogleLogin={handleGoogleLogin} 
+        isLoggingIn={isLoggingIn} 
+        loginError={loginError} 
+      />
+    );
   }
 
   return (
@@ -572,25 +604,25 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Firebase/Cloud Synchronization Status Badge */}
+            {/* Google Sheets Sync Status Badge */}
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-[11px] font-bold">
               {firebaseSyncStatus === 'synced' ? (
-                <span className="flex items-center gap-1.5 text-emerald-400" title="Data berhasil disinkronkan secara real-time dengan Firebase Firestore">
+                <span className="flex items-center gap-1.5 text-emerald-400" title="Data berhasil disinkronkan ke Google Sheets Anda">
                   <Cloud className="w-3.5 h-3.5" />
-                  <span>Firebase Synced</span>
+                  <span>Google Sheets Synced</span>
                 </span>
               ) : firebaseSyncStatus === 'syncing' ? (
                 <span className="flex items-center gap-1.5 text-indigo-400">
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Sinkronisasi...</span>
+                  <span>Sinkronisasi Google Sheets...</span>
                 </span>
               ) : firebaseSyncStatus === 'error' ? (
-                <span className="flex items-center gap-1.5 text-rose-400" title="Gagal menyambung ke Firestore. Silakan periksa kredensial Firebase Anda.">
+                <span className="flex items-center gap-1.5 text-rose-400" title="Gagal menyambung ke Google Sheets. Silakan masuk kembali.">
                   <CloudOff className="w-3.5 h-3.5" />
-                  <span>Sync Gagal</span>
+                  <span>Sync Google Sheets Gagal</span>
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-slate-400" title="Menggunakan Local Storage. Hubungkan ke database Firebase dengan mengatur variabel lingkungan VITE_FIREBASE_*.">
+                <span className="flex items-center gap-1.5 text-slate-400" title="Belum masuk Google Sheets.">
                   <Database className="w-3.5 h-3.5 text-slate-500" />
                   <span>Lokal Mode (Offline)</span>
                 </span>

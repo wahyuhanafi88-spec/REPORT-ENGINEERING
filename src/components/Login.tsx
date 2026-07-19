@@ -1,37 +1,22 @@
 import React, { useState } from 'react';
-import { Shield, Key, Eye, EyeOff, User, HardHat, Check, X, AlertCircle } from 'lucide-react';
+import { Shield, Key, Eye, EyeOff, User, HardHat, Check, X, AlertCircle, Database } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (role: 'User' | 'Engineer', name: string) => void;
+  onGoogleLogin: () => Promise<void>;
+  isLoggingIn: boolean;
+  loginError: string;
 }
 
-export default function Login({ onLogin }: LoginProps) {
-  const [selectedRole, setSelectedRole] = useState<'User' | 'Engineer'>('Engineer');
-  const [email, setEmail] = useState('engineer@panin.co.id');
-  const [password, setPassword] = useState('******');
-  const [showPassword, setShowPassword] = useState(false);
-  const [customName, setCustomName] = useState('');
+export default function Login({ onGoogleLogin, isLoggingIn, loginError }: LoginProps) {
   const [error, setError] = useState('');
 
-  const handleRoleChange = (role: 'User' | 'Engineer') => {
-    setSelectedRole(role);
-    if (role === 'Engineer') {
-      setEmail('engineer@panin.co.id');
-      setCustomName('DWI CAHYADI');
-    } else {
-      setEmail('tenant.user@panin.co.id');
-      setCustomName('USER PANIN');
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
-      setError('Email wajib diisi!');
-      return;
+    try {
+      await onGoogleLogin();
+    } catch (err: any) {
+      setError(err.message || 'Gagal masuk dengan Google');
     }
-    const finalName = customName || (selectedRole === 'Engineer' ? 'DWI CAHYADI' : 'USER PANIN');
-    onLogin(selectedRole, finalName);
   };
 
   return (
@@ -40,7 +25,7 @@ export default function Login({ onLogin }: LoginProps) {
       {/* Decorative ambient blobs */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl pointer-events-none" />
-
+ 
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch z-10">
         
         {/* Left Panel: App Branding & Permissions details */}
@@ -49,210 +34,132 @@ export default function Login({ onLogin }: LoginProps) {
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/10 text-indigo-400 rounded-full border border-indigo-500/20 text-xs font-bold uppercase tracking-wider">
               <Shield className="w-3.5 h-3.5" />
-              Sistem Otoritas Multi-Role
+              Sistem Otoritas Google Workspace
             </div>
-
+ 
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
                 Panin Palmerah Building Management
               </h1>
               <p className="text-slate-400 text-xs mt-2 font-medium">
-                Sistem digitalisasi pemeliharaan gedung, helpdesk tiket harian, pencatatan meter energi, sisa stok material, serta roster teknisi terpadu.
+                Sistem digitalisasi pemeliharaan gedung, helpdesk tiket harian, pencatatan meter energi, sisa stok material, serta roster teknisi terpadu dengan sinkronisasi langsung ke Google Sheets.
               </p>
             </div>
-
+ 
             {/* Matrix of capabilities explaining READ, WRITE, DELETE for both roles */}
             <div className="space-y-4 pt-2">
               <h3 className="text-xs font-bold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-2">
-                Hak Akses & Tindakan Pengguna (Role Privileges)
+                Akses & Integrasi Multi-Perangkat
               </h3>
-
+ 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 
                 {/* User Role column */}
                 <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800/80 space-y-3">
                   <div className="flex items-center gap-1.5 text-slate-200">
-                    <User className="w-4 h-4 text-slate-400" />
-                    <span className="font-extrabold text-xs">Role: "User" (Regular)</span>
+                    <Database className="w-4 h-4 text-emerald-400" />
+                    <span className="font-extrabold text-xs">Sinkronisasi Real-Time</span>
                   </div>
                   
-                  <div className="space-y-2 text-[11px] leading-relaxed">
-                    <div>
-                      <span className="text-emerald-400 font-bold block">✓ MEMBACA (Read-Only):</span>
-                      <p className="text-slate-400">
-                        Dasbor utama, status helpdesk, agenda PM, catatan meter listrik/air, inventaris gudang, & daftar karyawan.
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-rose-400 font-bold block">✗ MENGEDIT (Write):</span>
-                      <p className="text-slate-500 italic">
-                        Akses ditolak. Tidak bisa input data, menyelesaikan PM, atur stok gudang, atau ubah roster.
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-rose-400 font-bold block">✗ MENGHAPUS (Delete):</span>
-                      <p className="text-slate-500 italic">
-                        Dilarang menghapus data karyawan atau dokumen apa pun.
-                      </p>
-                    </div>
+                  <div className="space-y-2 text-[11px] leading-relaxed text-slate-400">
+                    <p>
+                      Semua data inventaris, checklist pemeliharaan (PM), pengeluaran biaya, dan helpdesk tiket disimpan langsung di Google Spreadsheet Anda secara real-time.
+                    </p>
+                    <p>
+                      Memudahkan akses data dari laptop, tablet, maupun ponsel pintar Anda di mana saja secara aman.
+                    </p>
                   </div>
                 </div>
-
+ 
                 {/* Engineer Role column */}
                 <div className="bg-indigo-950/20 p-4 rounded-xl border border-indigo-500/20 space-y-3">
                   <div className="flex items-center gap-1.5 text-indigo-300">
-                    <HardHat className="w-4 h-4 text-indigo-400" />
-                    <span className="font-extrabold text-xs text-indigo-400">Role: "Engineer" (Petugas)</span>
+                    <Shield className="w-4 h-4 text-indigo-400" />
+                    <span className="font-extrabold text-xs text-indigo-400">Akses Eksklusif</span>
                   </div>
-
-                  <div className="space-y-2 text-[11px] leading-relaxed">
-                    <div>
-                      <span className="text-emerald-400 font-bold block">✓ MEMBACA (Full Access):</span>
-                      <p className="text-indigo-200/70">
-                        Semua modul aplikasi termasuk generator cetak laporan harian & bulanan.
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-emerald-400 font-bold block">✓ MENGEDIT (Write & Update):</span>
-                      <p className="text-indigo-200/70">
-                        Membuat tiket helpdesk, input perbaikan & biaya material, centang checklist PM, input meter energi, <b>tambah & update peralatan kerja rusak</b>, <b>tambah/edit stok material baru</b>, dan kelola karyawan.
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-emerald-400 font-bold block">✓ MENGHAPUS (Delete):</span>
-                      <p className="text-indigo-200/70">
-                        Mampu menghapus karyawan dari roster dan menyesuaikan data aset terdaftar.
-                      </p>
-                    </div>
+ 
+                  <div className="space-y-2 text-[11px] leading-relaxed text-indigo-200/70">
+                    <p>
+                      Sistem diamankan menggunakan Google OAuth. Hanya email resmi yang memiliki otoritas penuh untuk masuk, memodifikasi, dan menghapus catatan data.
+                    </p>
+                    <p className="font-bold text-indigo-400">
+                      Email Utama: engineeringbss78@gmail.com
+                    </p>
                   </div>
                 </div>
-
+ 
               </div>
             </div>
-
+ 
           </div>
-
+ 
           <div className="text-[10px] text-slate-500 pt-6 mt-6 border-t border-slate-800">
             Sistem pengaman akses ganda • Panin Palmerah Building Management, Jakarta Barat, DKI Jakarta.
           </div>
         </div>
-
+ 
         {/* Right Panel: Interactive Login Card */}
         <div className="lg:col-span-5 bg-white rounded-2xl p-6 sm:p-8 shadow-2xl flex flex-col justify-between border border-slate-200">
           
           <div className="space-y-6">
             <div>
               <h2 className="text-xl font-black text-slate-900">Masuk ke Sistem</h2>
-              <p className="text-xs text-slate-500 mt-1">Silakan pilih peran kerja Anda untuk menguji tingkat hak akses aplikasi.</p>
+              <p className="text-xs text-slate-500 mt-1">Silakan masuk menggunakan akun Google Anda untuk mengakses sistem managemen gedung.</p>
             </div>
-
+ 
             {/* Error banner */}
-            {error && (
-              <div className="p-3 bg-rose-50 text-rose-800 rounded-lg text-xs font-semibold flex items-center gap-2 border border-rose-200">
-                <AlertCircle className="w-4 h-4 text-rose-600" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {/* Selector Tab for Demo Roles */}
-            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl">
-              <button
-                type="button"
-                onClick={() => handleRoleChange('Engineer')}
-                className={`py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  selectedRole === 'Engineer' 
-                    ? 'bg-slate-900 text-white shadow' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <HardHat className="w-4 h-4" />
-                Engineer
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRoleChange('User')}
-                className={`py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                  selectedRole === 'User' 
-                    ? 'bg-slate-900 text-white shadow' 
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <User className="w-4 h-4" />
-                User Umum
-              </button>
-            </div>
-
-            {/* Simulated Credentials Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-slate-500 uppercase block">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Contoh: engineer@panin.co.id"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-medium outline-none text-slate-800 focus:bg-white focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-slate-500 uppercase block">Kata Sandi</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-3 pr-10 py-2.5 text-xs font-mono outline-none text-slate-800 focus:bg-white"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+            {(error || loginError) && (
+              <div className="p-3 bg-rose-50 text-rose-800 rounded-lg text-xs font-semibold flex flex-col gap-1 border border-rose-200">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                  <span>{error || loginError}</span>
                 </div>
               </div>
-
-              {/* Optional custom display name input */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-extrabold text-slate-500 uppercase block">Nama Tampilan Demo</label>
-                <input
-                  type="text"
-                  placeholder={selectedRole === 'Engineer' ? 'DWI CAHYADI (Default)' : 'USER PANIN (Default)'}
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value.toUpperCase())}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs font-bold outline-none text-slate-800 focus:bg-white focus:border-indigo-500"
-                />
+            )}
+ 
+            {/* Google Sign-In Container */}
+            <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+              
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-2">
+                <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">Persyaratan Masuk</span>
+                <p className="text-slate-500 leading-relaxed">
+                  Guna menjamin keamanan data multi-perangkat, aplikasi ini memerlukan otentikasi Google. Silakan klik tombol di bawah untuk masuk.
+                </p>
+                <p className="font-semibold text-indigo-600">
+                  Email yang Diperbolehkan: engineeringbss78@gmail.com
+                </p>
               </div>
 
               <div className="pt-3">
                 <button
                   type="submit"
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+                  disabled={isLoggingIn}
+                  className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 rounded-lg px-6 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all shadow-sm focus:outline-none disabled:opacity-50"
                 >
-                  <Key className="w-4 h-4" />
-                  Masuk Sebagai {selectedRole === 'Engineer' ? 'Engineer' : 'User'}
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.4 1 3.4 3.7 1.5 7.6l3.9 3C6.3 7.5 9 5 12 5z"></path>
+                    <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"></path>
+                    <path fill="#FBBC05" d="M5.4 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.5 7.2C.5 9.2 0 11.5 0 13.8s.5 4.6 1.5 6.6l3.9-3.1C5.1 16.5 5.1 15.6 5.4 14.8z"></path>
+                    <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.7-2.5-6.6-5.6l-3.9 3C3.4 19.3 7.4 23 12 23z"></path>
+                  </svg>
+                  <span>{isLoggingIn ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
                 </button>
               </div>
-
+ 
             </form>
           </div>
-
+ 
           <div className="mt-8 pt-4 border-t border-slate-100 space-y-2">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bantuan Pengujian Cepat:</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Integrasi Google Drive & Sheets:</span>
             <p className="text-[10px] text-slate-500 leading-normal">
-              Aplikasi ini mengaktifkan pembatasan hak ases menu dan kontrol edit di sisi klien. Pilih salah satu tab peran di atas lalu klik tombol <b>Masuk</b> untuk menguji secara langsung.
+              Saat pertama kali masuk, aplikasi akan otomatis mencari atau membuat file Google Spreadsheet bernama <b>"BSS Engineering App Data"</b> pada akun Drive Anda untuk media penyimpanan terpusat.
             </p>
           </div>
-
+ 
         </div>
-
+ 
       </div>
-
+ 
     </div>
   );
 }
