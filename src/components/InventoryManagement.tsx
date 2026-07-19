@@ -25,7 +25,7 @@ interface InventoryProps {
   materials: MaterialItem[];
   onUpdateToolCondition: (id: string, goodDiff: number, badDiff: number) => void;
   onUpdateMaterialStock: (id: string, qtyDiff: number) => void;
-  userRole?: 'User' | 'Engineer';
+  userRole?: string;
   onAddTool?: (newTool: Omit<ToolItem, 'id'>) => void;
   onUpdateTool?: (updatedTool: ToolItem) => void;
   onDeleteTool?: (id: string) => void;
@@ -39,7 +39,7 @@ export default function InventoryManagement({
   materials, 
   onUpdateToolCondition, 
   onUpdateMaterialStock,
-  userRole = 'Engineer',
+  userRole = 'Super Admin',
   onAddTool,
   onUpdateTool,
   onDeleteTool,
@@ -47,7 +47,7 @@ export default function InventoryManagement({
   onUpdateMaterial,
   onDeleteMaterial
 }: InventoryProps) {
-  const isEngineer = userRole === 'Engineer';
+  const isEngineer = userRole === 'Super Admin' || userRole === 'Admin';
   const [activeTab, setActiveTab] = useState<'tools' | 'materials'>('materials');
   const [searchQuery, setSearchQuery] = useState('');
   

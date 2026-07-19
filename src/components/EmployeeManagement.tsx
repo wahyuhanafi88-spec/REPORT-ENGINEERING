@@ -26,7 +26,7 @@ interface EmployeeManagementProps {
   onAddEmployee: (newEmp: Omit<Employee, 'id'>) => void;
   onUpdateEmployee: (updatedEmp: Employee) => void;
   onDeleteEmployee: (id: string) => void;
-  userRole?: 'User' | 'Engineer';
+  userRole?: string;
 }
 
 export default function EmployeeManagement({ 
@@ -34,9 +34,9 @@ export default function EmployeeManagement({
   onAddEmployee, 
   onUpdateEmployee, 
   onDeleteEmployee,
-  userRole = 'Engineer'
+  userRole = 'Super Admin'
 }: EmployeeManagementProps) {
-  const isEngineer = userRole === 'Engineer';
+  const isEngineer = userRole === 'Super Admin';
   
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');

@@ -80,10 +80,15 @@ export default function Login({ onGoogleLogin, isLoggingIn, loginError }: LoginP
  
                   <div className="space-y-2 text-[11px] leading-relaxed text-indigo-200/70">
                     <p>
-                      Sistem diamankan menggunakan Google OAuth. Hanya email resmi yang memiliki otoritas penuh untuk masuk, memodifikasi, dan menghapus catatan data.
+                      Sistem diamankan menggunakan Google OAuth. Akses disesuaikan berdasarkan peran email resmi yang terdaftar:
                     </p>
                     <p className="font-bold text-indigo-400">
-                      Email Utama: engineeringbss78@gmail.com
+                      • Super Admin (Akses Penuh):<br />
+                      &nbsp;&nbsp;wahyuhanafi88@gmail.com<br />
+                      • Admin (Edit Laporan, dll):<br />
+                      &nbsp;&nbsp;engineeringbss78@gmail.com<br />
+                      • Teknisi (Tiket, Listrik, Air, WO):<br />
+                      &nbsp;&nbsp;engineer4@gmail.com
                     </p>
                   </div>
                 </div>
@@ -123,11 +128,13 @@ export default function Login({ onGoogleLogin, isLoggingIn, loginError }: LoginP
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 text-xs space-y-2">
                 <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">Persyaratan Masuk</span>
                 <p className="text-slate-500 leading-relaxed">
-                  Guna menjamin keamanan data multi-perangkat, aplikasi ini memerlukan otentikasi Google. Silakan klik tombol di bawah untuk masuk.
+                  Guna menjamin keamanan data multi-perangkat, aplikasi ini memerlukan otentikasi Google. Akses terbatas berdasarkan email terdaftar:
                 </p>
-                <p className="font-semibold text-indigo-600">
-                  Email yang Diperbolehkan: engineeringbss78@gmail.com
-                </p>
+                <div className="font-semibold text-indigo-600 space-y-1 text-[11px]">
+                  <div>• <b>wahyuhanafi88@gmail.com</b> (Super Admin)</div>
+                  <div>• <b>engineeringbss78@gmail.com</b> (Admin)</div>
+                  <div>• <b>engineer4@gmail.com</b> (Teknisi)</div>
+                </div>
               </div>
 
               <div className="pt-3">

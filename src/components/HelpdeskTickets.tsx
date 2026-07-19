@@ -23,11 +23,11 @@ interface HelpdeskProps {
   employees: Employee[];
   onAddTicket: (ticket: Omit<Ticket, 'id' | 'ticketNo' | 'createdAt'>) => void;
   onUpdateTicketStatus: (id: string, status: TicketStatus, details?: { actionTaken?: string; cost?: number; assignedTo?: string }) => void;
-  userRole?: 'User' | 'Engineer';
+  userRole?: string;
 }
 
-export default function HelpdeskTickets({ tickets, employees, onAddTicket, onUpdateTicketStatus, userRole = 'Engineer' }: HelpdeskProps) {
-  const isEngineer = userRole === 'Engineer';
+export default function HelpdeskTickets({ tickets, employees, onAddTicket, onUpdateTicketStatus, userRole = 'Super Admin' }: HelpdeskProps) {
+  const isEngineer = userRole === 'Super Admin' || userRole === 'Admin' || userRole === 'Teknisi';
   // Navigation states
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [showAddModal, setShowAddModal] = useState(false);

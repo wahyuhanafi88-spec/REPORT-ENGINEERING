@@ -68,7 +68,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'helpdesk' | 'preventive' | 'energy' | 'inventory' | 'reports' | 'employees'>('dashboard');
 
   // User Authentication State
-  const [user, setUser] = useState<{ role: 'User' | 'Engineer'; name: string } | null>(null);
+  const [user, setUser] = useState<{ role: 'Super Admin' | 'Admin' | 'Teknisi'; name: string } | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -152,11 +152,29 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = initAuth(
       async (fbUser, token) => {
-        if (fbUser.email === 'engineeringbss78@gmail.com') {
+        const emailLower = fbUser.email?.toLowerCase() || '';
+        const allowedEmails = ['engineeringbss78@gmail.com', 'wahyuhanafi88@gmail.com', 'wahyuhnafi88@gmail.com', 'engineer4@gmail.com'];
+        if (allowedEmails.includes(emailLower)) {
+          let role: 'Super Admin' | 'Admin' | 'Teknisi' = 'Teknisi';
+          let roleLabel = 'Teknisi';
+          if (emailLower === 'wahyuhanafi88@gmail.com' || emailLower === 'wahyuhnafi88@gmail.com') {
+            role = 'Super Admin';
+            roleLabel = 'Super Admin';
+          } else if (emailLower === 'engineeringbss78@gmail.com') {
+            role = 'Admin';
+            roleLabel = 'Admin';
+          }
+
           setUser({
-            role: 'Engineer',
-            name: fbUser.displayName || 'BSS Engineering'
+            role,
+            name: fbUser.displayName || roleLabel
           });
+
+          // Redirect Restricted Roles away from forbidden tabs
+          if (role === 'Teknisi') {
+            setActiveTab(prev => (prev === 'inventory' || prev === 'employees' ? 'dashboard' : prev));
+          }
+
           setAccessToken(token);
           setFirebaseSyncStatus('syncing');
           try {
@@ -178,7 +196,7 @@ export default function App() {
         } else {
           // Force sign out if not allowed
           await googleLogout();
-          setLoginError('Akses Dibatasi. Silakan masuk menggunakan email engineeringbss78@gmail.com.');
+          setLoginError('Akses Dibatasi. Silakan masuk menggunakan email resmi yang terdaftar.');
           setUser(null);
         }
       },
@@ -198,15 +216,33 @@ export default function App() {
       const result = await googleSignIn();
       if (result) {
         const { user: fbUser, accessToken: token } = result;
-        if (fbUser.email !== 'engineeringbss78@gmail.com') {
+        const emailLower = fbUser.email?.toLowerCase() || '';
+        const allowedEmails = ['engineeringbss78@gmail.com', 'wahyuhanafi88@gmail.com', 'wahyuhnafi88@gmail.com', 'engineer4@gmail.com'];
+        if (!allowedEmails.includes(emailLower)) {
           await googleLogout();
-          throw new Error('Akses Dibatasi. Silakan masuk menggunakan email engineeringbss78@gmail.com.');
+          throw new Error('Akses Dibatasi. Silakan masuk menggunakan email resmi yang terdaftar.');
+        }
+
+        let role: 'Super Admin' | 'Admin' | 'Teknisi' = 'Teknisi';
+        let roleLabel = 'Teknisi';
+        if (emailLower === 'wahyuhanafi88@gmail.com' || emailLower === 'wahyuhnafi88@gmail.com') {
+          role = 'Super Admin';
+          roleLabel = 'Super Admin';
+        } else if (emailLower === 'engineeringbss78@gmail.com') {
+          role = 'Admin';
+          roleLabel = 'Admin';
         }
 
         setUser({
-          role: 'Engineer',
-          name: fbUser.displayName || 'BSS Engineering'
+          role,
+          name: fbUser.displayName || roleLabel
         });
+
+        // Redirect Restricted Roles away from forbidden tabs
+        if (role === 'Teknisi') {
+          setActiveTab(prev => (prev === 'inventory' || prev === 'employees' ? 'dashboard' : prev));
+        }
+
         setAccessToken(token);
 
         setFirebaseSyncStatus('syncing');
@@ -557,7 +593,7 @@ export default function App() {
                 <div className="text-right">
                   <span className="text-xs font-black block text-slate-100">{user.name}</span>
                   <span className="text-[10px] font-semibold text-indigo-400 block -mt-0.5">
-                    {user.role === 'Engineer' ? 'AM / Engineer' : 'User Umum'}
+                    {user.role}
                   </span>
                 </div>
                 <div className="w-9 h-9 rounded-full bg-indigo-100 border-2 border-indigo-500 flex items-center justify-center text-indigo-900 font-extrabold text-xs">
@@ -629,14 +665,16 @@ export default function App() {
               )}
             </div>
 
-            <button
-              onClick={handleResetData}
-              className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-all uppercase tracking-wider font-bold"
-              title="Setel ulang data bawaan excel harian/bulanan"
-            >
-              <RefreshCw className="w-3 h-3" />
-              Reset Data Bawaan
-            </button>
+            {user.role === 'Super Admin' && (
+              <button
+                onClick={handleResetData}
+                className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-300 transition-all uppercase tracking-wider font-bold"
+                title="Setel ulang data bawaan excel harian/bulanan"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Reset Data Bawaan
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -653,7 +691,12 @@ export default function App() {
               { id: 'inventory', label: 'Gudang & Suku Cadang', icon: Package },
               { id: 'employees', label: 'Daftar Karyawan', icon: User },
               { id: 'reports', label: 'Cetak Laporan', icon: FileText },
-            ].map(tab => {
+            ].filter(tab => {
+              if (user.role === 'Teknisi') {
+                return ['dashboard', 'helpdesk', 'preventive', 'energy', 'reports'].includes(tab.id);
+              }
+              return true;
+            }).map(tab => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
