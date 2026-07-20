@@ -17,8 +17,8 @@ const MANUAL_ACCOUNTS = [
     name: 'Wahyu Hanafi'
   },
   {
-    email: 'engineeringbss78@gmail.com',
-    aliases: [],
+    email: 'engineering78@gmail.com',
+    aliases: ['engineeringbss78@gmail.com'],
     password: 'admin123',
     role: 'Admin' as const,
     name: 'BSS Engineering'
@@ -251,7 +251,7 @@ export default function Login({ onGoogleLogin, onManualLogin, isLoggingIn, login
                   </p>
                   <div className="font-semibold text-indigo-600 space-y-1.5 text-[10px]">
                     <div>• <b>wahyuhanafi88@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>superadmin123</code><span className="text-slate-400 font-normal">)</span></div>
-                    <div>• <b>engineeringbss78@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>admin123</code><span className="text-slate-400 font-normal">)</span></div>
+                    <div>• <b>engineering78@gmail.com / engineeringbss78@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>admin123</code><span className="text-slate-400 font-normal">)</span></div>
                     <div>• <b>engineer4@gmail.com</b> <span className="text-slate-400 font-normal">(Sandi:</span> <code>teknisi123</code><span className="text-slate-400 font-normal">)</span></div>
                   </div>
                 </div>

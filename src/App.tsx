@@ -174,14 +174,14 @@ export default function App() {
     const unsubscribe = initAuth(
       async (fbUser, token) => {
         const emailLower = fbUser.email?.toLowerCase() || '';
-        const allowedEmails = ['engineeringbss78@gmail.com', 'wahyuhanafi88@gmail.com', 'wahyuhnafi88@gmail.com', 'engineer4@gmail.com'];
+        const allowedEmails = ['engineeringbss78@gmail.com', 'engineering78@gmail.com', 'wahyuhanafi88@gmail.com', 'wahyuhnafi88@gmail.com', 'engineer4@gmail.com'];
         if (allowedEmails.includes(emailLower)) {
           let role: 'Super Admin' | 'Admin' | 'Teknisi' = 'Teknisi';
           let roleLabel = 'Teknisi';
           if (emailLower === 'wahyuhanafi88@gmail.com' || emailLower === 'wahyuhnafi88@gmail.com') {
             role = 'Super Admin';
             roleLabel = 'Super Admin';
-          } else if (emailLower === 'engineeringbss78@gmail.com') {
+          } else if (emailLower === 'engineeringbss78@gmail.com' || emailLower === 'engineering78@gmail.com') {
             role = 'Admin';
             roleLabel = 'Admin';
           }
@@ -229,7 +229,10 @@ export default function App() {
         }
       },
       () => {
-        setUser(null);
+        // Prevent manual local session from being reset on initial Google Auth state checking failure
+        if (typeof window !== 'undefined' && !localStorage.getItem('bss_manual_user')) {
+          setUser(null);
+        }
       }
     );
     return () => {
